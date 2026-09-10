@@ -18,6 +18,16 @@ Import-Module ActiveDirectory
 
 $ErrorActionPreference = "Stop"
 
+# Log em arquivo, para o caso do script rodar sem ninguem acompanhando a tela
+if (-not (Test-Path "C:\Scripts")) { New-Item -ItemType Directory -Path "C:\Scripts" -Force | Out-Null }
+$logTranscript = "C:\Scripts\Hardening-GPO-Completo_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+try {
+    Start-Transcript -Path $logTranscript -Append | Out-Null
+    Write-Host "Log desta execucao sendo salvo em: $logTranscript" -ForegroundColor DarkGray
+} catch {
+    Write-Host "Nao foi possivel iniciar o log em arquivo (Start-Transcript). Continuando so com saida no console." -ForegroundColor Yellow
+}
+
 #region ========================= FUNCOES AUXILIARES =========================
 
 function Read-NumeroValidado {
@@ -394,10 +404,28 @@ if (Read-SimNao -Pergunta "Deseja habilitar o LAPS agora") {
         dsacls $ouLaps | Select-String "SELF"
     }
 
-    # ---------- Etapa 4: criar e vincular a GPO ----------
-    New-GPO -Name $nomeGpoLaps -Comment "GPO do LAPS criada via script em $(Get-Date -Format 'dd/MM/yyyy HH:mm')" | Out-Null
-    New-GPLink -Name $nomeGpoLaps -Target $ouLaps | Out-Null
-    Write-Host "GPO '$nomeGpoLaps' criada e vinculada em $ouLaps" -ForegroundColor Green
+    # ---------- Etapa 4: criar e vincular a GPO (com checagem de reexecucao) ----------
+    $gpoLapsExistente = Get-GPO -Name $nomeGpoLaps -ErrorAction SilentlyContinue
+    if ($gpoLapsExistente) {
+        Write-Host "GPO '$nomeGpoLaps' ja existe." -ForegroundColor Yellow
+        if (Read-SimNao -Pergunta "Deseja reconfigurar essa GPO existente (reaplicar as configuracoes nela)" -PadraoS_N "S") {
+            Write-Host "Reutilizando GPO existente '$nomeGpoLaps'." -ForegroundColor Green
+            try { New-GPLink -Name $nomeGpoLaps -Target $ouLaps -ErrorAction Stop | Out-Null } catch { }
+        } else {
+            do {
+                $nomeGpoLaps = Read-Host "Digite um novo nome para a GPO do LAPS"
+                $gpoLapsExistente = Get-GPO -Name $nomeGpoLaps -ErrorAction SilentlyContinue
+                if ($gpoLapsExistente) { Write-Host "Esse nome tambem ja existe." -ForegroundColor Yellow }
+            } while ($gpoLapsExistente)
+            New-GPO -Name $nomeGpoLaps -Comment "GPO do LAPS criada via script em $(Get-Date -Format 'dd/MM/yyyy HH:mm')" | Out-Null
+            New-GPLink -Name $nomeGpoLaps -Target $ouLaps | Out-Null
+            Write-Host "GPO '$nomeGpoLaps' criada e vinculada em $ouLaps" -ForegroundColor Green
+        }
+    } else {
+        New-GPO -Name $nomeGpoLaps -Comment "GPO do LAPS criada via script em $(Get-Date -Format 'dd/MM/yyyy HH:mm')" | Out-Null
+        New-GPLink -Name $nomeGpoLaps -Target $ouLaps | Out-Null
+        Write-Host "GPO '$nomeGpoLaps' criada e vinculada em $ouLaps" -ForegroundColor Green
+    }
 
     # ---------- Configuracoes de senha do LAPS ----------
     Write-Host "`n--- Configuracao das regras de senha do LAPS ---" -ForegroundColor Cyan
@@ -477,9 +505,27 @@ if (Read-SimNao -Pergunta "Deseja configurar Restricted Groups (grupo Administra
     $nomeGpoRestricted = Read-Host "Digite o nome da GPO de Restricted Groups"
     $ouRestricted = Select-OU -Titulo "OU onde aplicar Restricted Groups"
 
-    New-GPO -Name $nomeGpoRestricted -Comment "Restricted Groups - Administradores locais - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" | Out-Null
-    New-GPLink -Name $nomeGpoRestricted -Target $ouRestricted | Out-Null
-    Write-Host "GPO '$nomeGpoRestricted' criada e vinculada em $ouRestricted" -ForegroundColor Green
+    $gpoRestrictedExistente = Get-GPO -Name $nomeGpoRestricted -ErrorAction SilentlyContinue
+    if ($gpoRestrictedExistente) {
+        Write-Host "GPO '$nomeGpoRestricted' ja existe." -ForegroundColor Yellow
+        if (Read-SimNao -Pergunta "Deseja reconfigurar essa GPO existente (reaplicar Restricted Groups nela)" -PadraoS_N "S") {
+            Write-Host "Reutilizando GPO existente '$nomeGpoRestricted'." -ForegroundColor Green
+            try { New-GPLink -Name $nomeGpoRestricted -Target $ouRestricted -ErrorAction Stop | Out-Null } catch { }
+        } else {
+            do {
+                $nomeGpoRestricted = Read-Host "Digite um novo nome para a GPO"
+                $gpoRestrictedExistente = Get-GPO -Name $nomeGpoRestricted -ErrorAction SilentlyContinue
+                if ($gpoRestrictedExistente) { Write-Host "Esse nome tambem ja existe." -ForegroundColor Yellow }
+            } while ($gpoRestrictedExistente)
+            New-GPO -Name $nomeGpoRestricted -Comment "Restricted Groups - Administradores locais - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" | Out-Null
+            New-GPLink -Name $nomeGpoRestricted -Target $ouRestricted | Out-Null
+            Write-Host "GPO '$nomeGpoRestricted' criada e vinculada em $ouRestricted" -ForegroundColor Green
+        }
+    } else {
+        New-GPO -Name $nomeGpoRestricted -Comment "Restricted Groups - Administradores locais - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" | Out-Null
+        New-GPLink -Name $nomeGpoRestricted -Target $ouRestricted | Out-Null
+        Write-Host "GPO '$nomeGpoRestricted' criada e vinculada em $ouRestricted" -ForegroundColor Green
+    }
 
     $listaMembros = $membrosRestricted -join ","
 
@@ -502,3 +548,5 @@ if (Read-SimNao -Pergunta "Deseja rodar agora a validacao das atividades efetuad
         Write-Host "Confira se ele foi baixado/colocado nesse caminho e rode manualmente." -ForegroundColor Yellow
     }
 }
+
+try { Stop-Transcript | Out-Null } catch { }
