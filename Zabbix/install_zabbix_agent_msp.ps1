@@ -8,11 +8,25 @@ $ScriptsPath    = "C:\Scripts"
 $AgentFolder    = "C:\Program Files\Zabbix Agent 2"
 $ConfigPath     = "$AgentFolder\zabbix_agent2.conf"
 $DeployLog      = "C:\Scripts\zabbix_deploy.log"
-$GitUpdateScript      = "https://raw.githubusercontent.com/MarceloRC/Zabbix-Install/main/windows_update_check.ps1"
-$GitADScript          = "https://raw.githubusercontent.com/MarceloRC/Zabbix-Install/main/ad_replication.ps1"
-$GitRDSScript         = "https://raw.githubusercontent.com/MarceloRC/Zabbix-Install/main/rds_grace.ps1"
-$GitADSecurityScript  = "https://raw.githubusercontent.com/MarceloRC/Zabbix-Install/main/ad_security_check.ps1"
-$GitADUserInvScript   = "https://raw.githubusercontent.com/MarceloRC/Zabbix-Install/main/ad_user_inventory.ps1"
+
+# Garante TLS 1.2 antes de qualquer download (necessario em Windows Server
+# mais antigos, ex.: 2012 R2, onde TLS 1.2 nao vem habilitado por padrao)
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+} catch {
+    Write-Host "AVISO: nao foi possivel forcar TLS 1.2. Downloads podem falhar em SO mais antigos." -ForegroundColor Yellow
+}
+
+# ---- Base do novo repositorio (Zener-Digital-LTDA/ScriptsPublic) ----
+$GitRawBase           = "https://raw.githubusercontent.com/Zener-Digital-LTDA/ScriptsPublic/main/Active-directory"
+$GitUpdateScript      = "$GitRawBase/windows_update_check.ps1"
+$GitADScript          = "$GitRawBase/ad_replication.ps1"
+$GitRDSScript         = "$GitRawBase/rds_grace.ps1"
+$GitADSecurityScript  = "$GitRawBase/ad_security_check.ps1"
+$GitADUserInvScript   = "$GitRawBase/ad_user_inventory.ps1"
+$GitHardeningScript   = "$GitRawBase/Hardening-GPO-Completo.ps1"
+$GitValidaScript      = "$GitRawBase/Valida-Hardening-GPO.ps1"
+
 $AgentURL        = "https://cdn.zabbix.com/zabbix/binaries/stable/7.0/7.0.23/zabbix_agent2-7.0.23-windows-amd64-openssl.msi"
 $AgentInstaller  = "C:\Scripts\zabbix_agent2.msi"
 # =========================
@@ -459,3 +473,29 @@ Write-Log "========== DEPLOY FINALIZADO =========="
 Write-Log "Log completo salvo em: $DeployLog"
 Write-Host ""
 Write-Host "ZABBIX AGENT INSTALADO E CONFIGURADO" -ForegroundColor Green
+
+# =========================
+# HARDENING DE GPO (opcional, somente se for Domain Controller)
+# =========================
+if ($IsDC) {
+    Write-Host ""
+    Write-Host "Este servidor foi identificado como Domain Controller." -ForegroundColor Cyan
+    $aplicarHardening = Read-Host "Deseja aplicar as GPOs padrao de hardening agora? (Y/N)"
+
+    if ($aplicarHardening -eq "Y" -or $aplicarHardening -eq "y") {
+        Write-Log "Baixando scripts de hardening de GPO do GitHub..."
+        try {
+            Invoke-WebRequest $GitHardeningScript -OutFile "$ScriptsPath\Hardening-GPO-Completo.ps1" -ErrorAction Stop
+            Invoke-WebRequest $GitValidaScript    -OutFile "$ScriptsPath\Valida-Hardening-GPO.ps1"    -ErrorAction Stop
+            Write-Log "Scripts de hardening baixados com sucesso em $ScriptsPath."
+
+            Write-Log "Executando Hardening-GPO-Completo.ps1..."
+            & "$ScriptsPath\Hardening-GPO-Completo.ps1"
+            Write-Log "Execucao do Hardening-GPO-Completo.ps1 finalizada."
+        } catch {
+            Write-Log "ERRO ao baixar/executar os scripts de hardening: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Log "Hardening de GPO nao aplicado agora (opcao do usuario)."
+    }
+}
