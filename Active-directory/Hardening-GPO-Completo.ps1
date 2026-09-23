@@ -447,7 +447,7 @@ if (Read-SimNao -Pergunta "Deseja habilitar o LAPS agora") {
     $contaCustom = Read-Host "Nome de conta local customizada a gerenciar (Enter = usar 'Administrator' padrao)"
 
     $chaveLaps = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\LAPS"
-    Set-GPRegistryValue -Name $nomeGpoLaps -Key $chaveLaps -ValueName "BackupDirectory"               -Type DWord -Value 1               | Out-Null
+    Set-GPRegistryValue -Name $nomeGpoLaps -Key $chaveLaps -ValueName "BackupDirectory"               -Type DWord -Value 2               | Out-Null
     Set-GPRegistryValue -Name $nomeGpoLaps -Key $chaveLaps -ValueName "PasswordComplexity"             -Type DWord -Value $complexEscolha  | Out-Null
     Set-GPRegistryValue -Name $nomeGpoLaps -Key $chaveLaps -ValueName "PasswordLength"                 -Type DWord -Value $lapsLength      | Out-Null
     Set-GPRegistryValue -Name $nomeGpoLaps -Key $chaveLaps -ValueName "PasswordAgeDays"                -Type DWord -Value $lapsAge         | Out-Null
